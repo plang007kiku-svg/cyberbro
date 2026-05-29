@@ -5,33 +5,55 @@ import (
     "fmt"
     "io"
     "net/http"
+    "strings"
     "time"
 )
 
-type IOCResult struct {
-    IOC        string    `json:"ioc"`
-    RiskScore  int       `json:"risk_score"`
-    Timestamp  time.Time `json:"timestamp"`
+type IOCRequest struct {
+    Text string `json:"text"`
+}
+
+type IOCResponse struct {
+    IOC        string   `json:"ioc"`
+    Verdict    string   `json:"verdict"`
+    RiskScore  int      `json:"risk_score"`
+    Sources    []string `json:"sources"`
+    Timestamp  string   `json:"timestamp"`
+}
+
+func analyzeHandler(w http.ResponseWriter, r *http.Request) {
+    body, _ := io.ReadAll(r.Body)
+    var req IOCRequest
+    json.Unmarshal(body, &req)
+    
+    response := IOCResponse{
+        IOC:       req.Text,
+        Verdict:   "unknown",
+        RiskScore: 0,
+        Sources:   []string{},
+        Timestamp: time.Now().Format(time.RFC3339),
+    }
+    
+    // Simulate analysis
+    if strings.Contains(req.Text, ".") {
+        response.Verdict = "suspicious"
+        response.RiskScore = 50
+        response.Sources = append(response.Sources, "GoAnalyzer")
+    }
+    
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(response)
+}
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+    w.WriteHeader(http.StatusOK)
+    w.Write([]byte(`{"status":"ok"}`))
 }
 
 func main() {
-    http.HandleFunc("/api/realtime", func(w http.ResponseWriter, r *http.Request) {
-        w.Header().Set("Content-Type", "text/event-stream")
-        w.Header().Set("Cache-Control", "no-cache")
-        w.Header().Set("Connection", "keep-alive")
-
-        for {
-            resp, _ := http.Get("http://localhost:5000/api/recent")
-            if resp != nil {
-                body, _ := io.ReadAll(resp.Body)
-                fmt.Fprintf(w, "data: %s\n\n", body)
-                w.(http.Flusher).Flush()
-                resp.Body.Close()
-            }
-            time.Sleep(5 * time.Second)
-        }
-    })
-
-    fmt.Println("Go service running on :8080")
+    http.HandleFunc("/analyze", analyzeHandler)
+    http.HandleFunc("/health", healthHandler)
+    
+    fmt.Println("Go Cyberbro Service running on :8080")
     http.ListenAndServe(":8080", nil)
 }
